@@ -1,6 +1,8 @@
+
 //package com.example.demo.Config;
 //
 //import com.example.demo.Security.JwtAuthFilter;
+//import com.example.demo.Security.OAuthSuccessHandler;
 //import com.example.demo.util.JwtUtil;
 //import org.springframework.context.annotation.Bean;
 //import org.springframework.context.annotation.Configuration;
@@ -25,9 +27,11 @@
 //public class SecurityConfig {
 //
 //    private final JwtUtil jwtUtil;
+//    private final OAuthSuccessHandler oAuthSuccessHandler; // ← NEW
 //
-//    public SecurityConfig(JwtUtil jwtUtil) {
+//    public SecurityConfig(JwtUtil jwtUtil, OAuthSuccessHandler oAuthSuccessHandler) {
 //        this.jwtUtil = jwtUtil;
+//        this.oAuthSuccessHandler = oAuthSuccessHandler;
 //    }
 //
 //    @Bean
@@ -45,17 +49,13 @@
 //        http
 //            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 //            .csrf(csrf -> csrf.disable())
+//            // ── IMPORTANT: OAuth2 needs SESSION for the handshake, so we use IF_REQUIRED ──
 //            .sessionManagement(session ->
-//                    session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+//                    session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
 //            .authorizeHttpRequests(auth -> auth
-//
-//                // ══════════════════════════════════════════════
-//                // 1. FULLY PUBLIC — no token needed
-//                // ══════════════════════════════════════════════
+//                // ── All your existing rules stay EXACTLY the same ──────────────
 //                .requestMatchers("/api/auth/**").permitAll()
 //                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-//
-//                // Public GET endpoints
 //                .requestMatchers(HttpMethod.GET,  "/api/cars").permitAll()
 //                .requestMatchers(HttpMethod.GET,  "/api/cars/available").permitAll()
 //                .requestMatchers(HttpMethod.GET,  "/api/cars/search").permitAll()
@@ -65,122 +65,73 @@
 //                .requestMatchers(HttpMethod.GET,  "/api/reviews/car/**").permitAll()
 //                .requestMatchers(HttpMethod.GET,  "/api/bookings/track/**").permitAll()
 //                .requestMatchers(HttpMethod.GET,  "/api/drivers/available").permitAll()
-//
-//                // Cost preview — guests can simulate
 //                .requestMatchers(HttpMethod.GET,  "/api/bookings/cost-preview").permitAll()
 //                .requestMatchers(HttpMethod.POST, "/api/bookings/cost-preview").permitAll()
-//
-//                // Cost config — publicly readable
 //                .requestMatchers(HttpMethod.GET,  "/api/cost-config/insurance").permitAll()
 //                .requestMatchers(HttpMethod.GET,  "/api/cost-config/taxes").permitAll()
-//
-//                // Coupon validate — public
 //                .requestMatchers(HttpMethod.POST, "/api/coupons/validate").permitAll()
-//
-//                // Vendor registration — public (anyone can apply)
 //                .requestMatchers(HttpMethod.POST, "/api/vendors").permitAll()
 //
-//                // ══════════════════════════════════════════════
-//                // 2. ADMIN ONLY
-//                // ══════════════════════════════════════════════
+//                // ── NEW: OAuth2 endpoints must be public ───────────────────────
+//                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+//
+//                // ── All your existing role rules stay the same ─────────────────
 //                .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers("/api/dashboard/**").hasAuthority("ROLE_ADMIN")
-//
-//                // Coupon management — admin only (except validate above)
 //                .requestMatchers(HttpMethod.GET,   "/api/coupons").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST,  "/api/coupons").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.PATCH, "/api/coupons/**").hasAuthority("ROLE_ADMIN")
-//
-//                // Trust score — admin special actions
 //                .requestMatchers(HttpMethod.GET,  "/api/trust-score/all").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST, "/api/trust-score/user/*/recalculate").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST, "/api/trust-score/user/*/event").hasAuthority("ROLE_ADMIN")
-//
-//                // Cost config — admin write
 //                .requestMatchers(HttpMethod.PUT,  "/api/cost-config/**").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST, "/api/cost-config/**").hasAuthority("ROLE_ADMIN")
-//
-//                // Damage reports — admin only for all/status
 //                .requestMatchers(HttpMethod.GET,   "/api/damage-reports").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.PATCH, "/api/damage-reports/*/status").hasAuthority("ROLE_ADMIN")
-//
-//                // Reviews — admin can see all
 //                .requestMatchers(HttpMethod.GET, "/api/reviews").hasAuthority("ROLE_ADMIN")
-//
-//                // Payments — admin only for all/refund
 //                .requestMatchers(HttpMethod.GET,  "/api/payments").hasAuthority("ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST, "/api/payments/*/refund").hasAuthority("ROLE_ADMIN")
-//
-//                // ══════════════════════════════════════════════
-//                // 3. ADMIN + VENDOR
-//                // ══════════════════════════════════════════════
-//
-//                // Vendor management (GET list/pending/byId — admin+vendor)
 //                .requestMatchers(HttpMethod.GET,   "/api/vendors").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.GET,   "/api/vendors/pending").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.GET,   "/api/vendors/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.PUT,   "/api/vendors/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.PATCH, "/api/vendors/**").hasAuthority("ROLE_ADMIN")
-//
-//                // Cars — write operations (must be BEFORE generic GET /api/cars/**)
 //                .requestMatchers(HttpMethod.GET,    "/api/cars/vendor/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.POST,   "/api/cars").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.PUT,    "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.DELETE, "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.PATCH,  "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
-//
-//                // Drivers — specific paths BEFORE generic patterns
 //                .requestMatchers(HttpMethod.GET,   "/api/drivers").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.GET,   "/api/drivers/vendor/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.POST,  "/api/drivers").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.PATCH, "/api/drivers/*/availability").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN", "ROLE_DRIVER")
 //                .requestMatchers(HttpMethod.GET,   "/api/drivers/**").authenticated()
-//
-//                // Damage reports — vendor can file + view by booking
 //                .requestMatchers(HttpMethod.POST, "/api/damage-reports").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.GET,  "/api/damage-reports/booking/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
-//
-//                // Trust score — vendor views renter score
 //                .requestMatchers(HttpMethod.GET,  "/api/trust-score/user/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
-//
-//                // Vendor portal
 //                .requestMatchers("/api/vendor/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
-//
-//                // ══════════════════════════════════════════════
-//                // 4. CUSTOMER SPECIFIC (ADMIN can also access)
-//                // ══════════════════════════════════════════════
 //                .requestMatchers("/api/customer/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
 //                .requestMatchers("/api/trust-score/me/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
 //                .requestMatchers("/api/trust-score/me").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
-//
-//                // ══════════════════════════════════════════════
-//                // 5. DRIVER SPECIFIC (ADMIN can also access)
-//                // ══════════════════════════════════════════════
 //                .requestMatchers("/api/driver/**").hasAnyAuthority("ROLE_DRIVER", "ROLE_ADMIN")
-//
-//                // ══════════════════════════════════════════════
-//                // 6. ANY AUTHENTICATED USER
-//                // ══════════════════════════════════════════════
 //                .requestMatchers("/api/notifications/**").authenticated()
-//
-//                // Bookings — specific paths BEFORE generic patterns
 //                .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/status").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
 //                .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/cancel").authenticated()
 //                .requestMatchers(HttpMethod.POST,  "/api/bookings").authenticated()
 //                .requestMatchers(HttpMethod.GET,   "/api/bookings/my").authenticated()
 //                .requestMatchers(HttpMethod.GET,   "/api/bookings/**").authenticated()
-//
-//                // Payments — customer/admin process
 //                .requestMatchers(HttpMethod.POST, "/api/payments/process/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
 //                .requestMatchers(HttpMethod.GET,  "/api/payments/booking/**").authenticated()
-//
-//                // Reviews — customer submits
 //                .requestMatchers(HttpMethod.POST, "/api/reviews").hasAuthority("ROLE_CUSTOMER")
-//
-//                // ══════════════════════════════════════════════
-//                // 7. EVERYTHING ELSE — must be authenticated
-//                // ══════════════════════════════════════════════
 //                .anyRequest().authenticated()
+//            )
+//            // ── NEW: OAuth2 login configuration ──────────────────────────────
+//            .oauth2Login(oauth -> oauth
+//                .authorizationEndpoint(endpoint ->
+//                    endpoint.baseUri("/oauth2/authorize"))
+//                .redirectionEndpoint(endpoint ->
+//                    endpoint.baseUri("/oauth2/callback/*"))
+//                .successHandler(oAuthSuccessHandler)
 //            )
 //            .addFilterBefore(jwtAuthFilter(), UsernamePasswordAuthenticationFilter.class);
 //
@@ -205,7 +156,6 @@
 //        return source;
 //    }
 //}
-
 package com.example.demo.Config;
 
 import com.example.demo.Security.JwtAuthFilter;
@@ -234,7 +184,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
-    private final OAuthSuccessHandler oAuthSuccessHandler; // ← NEW
+    private final OAuthSuccessHandler oAuthSuccessHandler;
 
     public SecurityConfig(JwtUtil jwtUtil, OAuthSuccessHandler oAuthSuccessHandler) {
         this.jwtUtil = jwtUtil;
@@ -256,13 +206,21 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
-            // ── IMPORTANT: OAuth2 needs SESSION for the handshake, so we use IF_REQUIRED ──
+            // ── OAuth2 requires session for the handshake flow ──────────────
             .sessionManagement(session ->
                     session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .authorizeHttpRequests(auth -> auth
-                // ── All your existing rules stay EXACTLY the same ──────────────
+
+                // ══════════════════════════════════════════════════════
+                // 1. FULLY PUBLIC — no token needed
+                // ══════════════════════════════════════════════════════
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
+                // ── OAuth2 endpoints must be public ───────────────────
+                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+
+                // Public car browsing
                 .requestMatchers(HttpMethod.GET,  "/api/cars").permitAll()
                 .requestMatchers(HttpMethod.GET,  "/api/cars/available").permitAll()
                 .requestMatchers(HttpMethod.GET,  "/api/cars/search").permitAll()
@@ -272,67 +230,114 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,  "/api/reviews/car/**").permitAll()
                 .requestMatchers(HttpMethod.GET,  "/api/bookings/track/**").permitAll()
                 .requestMatchers(HttpMethod.GET,  "/api/drivers/available").permitAll()
+
+                // Cost preview — guests can simulate before booking
                 .requestMatchers(HttpMethod.GET,  "/api/bookings/cost-preview").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/bookings/cost-preview").permitAll()
+
+                // Cost config — publicly readable
                 .requestMatchers(HttpMethod.GET,  "/api/cost-config/insurance").permitAll()
                 .requestMatchers(HttpMethod.GET,  "/api/cost-config/taxes").permitAll()
+
+                // Coupon validate — public (show discount before login)
                 .requestMatchers(HttpMethod.POST, "/api/coupons/validate").permitAll()
+
+                // Vendor registration — anyone can apply to become a vendor
                 .requestMatchers(HttpMethod.POST, "/api/vendors").permitAll()
 
-                // ── NEW: OAuth2 endpoints must be public ───────────────────────
-                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-
-                // ── All your existing role rules stay the same ─────────────────
+                // ══════════════════════════════════════════════════════
+                // 2. ADMIN ONLY
+                // ══════════════════════════════════════════════════════
                 .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                 .requestMatchers("/api/dashboard/**").hasAuthority("ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.GET,   "/api/coupons").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST,  "/api/coupons").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/coupons/**").hasAuthority("ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.GET,  "/api/trust-score/all").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/trust-score/user/*/recalculate").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/trust-score/user/*/event").hasAuthority("ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.PUT,  "/api/cost-config/**").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/cost-config/**").hasAuthority("ROLE_ADMIN")
-                .requestMatchers(HttpMethod.GET,   "/api/damage-reports").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
+
                 .requestMatchers(HttpMethod.PATCH, "/api/damage-reports/*/status").hasAuthority("ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.GET, "/api/reviews").hasAuthority("ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.GET,  "/api/payments").hasAuthority("ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/payments/*/refund").hasAuthority("ROLE_ADMIN")
+
+                // ══════════════════════════════════════════════════════
+                // 3. ADMIN + VENDOR
+                // ══════════════════════════════════════════════════════
                 .requestMatchers(HttpMethod.GET,   "/api/vendors").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.GET,   "/api/vendors/pending").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.GET,   "/api/vendors/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.PUT,   "/api/vendors/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.PATCH, "/api/vendors/**").hasAuthority("ROLE_ADMIN")
+
+                // Cars — write operations
                 .requestMatchers(HttpMethod.GET,    "/api/cars/vendor/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.POST,   "/api/cars").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.PUT,    "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.PATCH,  "/api/cars/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+
+                // Drivers
                 .requestMatchers(HttpMethod.GET,   "/api/drivers").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.GET,   "/api/drivers/vendor/**").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.POST,  "/api/drivers").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/drivers/*/availability").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN", "ROLE_DRIVER")
                 .requestMatchers(HttpMethod.GET,   "/api/drivers/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/damage-reports").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
-                .requestMatchers(HttpMethod.GET,  "/api/damage-reports/booking/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+
+                // Damage reports
+                .requestMatchers(HttpMethod.GET,   "/api/damage-reports").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
+                .requestMatchers(HttpMethod.POST,  "/api/damage-reports").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+                .requestMatchers(HttpMethod.GET,   "/api/damage-reports/booking/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+
                 .requestMatchers(HttpMethod.GET,  "/api/trust-score/user/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+
                 .requestMatchers("/api/vendor/**").hasAnyAuthority("ROLE_VENDOR", "ROLE_ADMIN")
+
+                // ══════════════════════════════════════════════════════
+                // 4. CUSTOMER
+                // ══════════════════════════════════════════════════════
                 .requestMatchers("/api/customer/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
                 .requestMatchers("/api/trust-score/me/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
                 .requestMatchers("/api/trust-score/me").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
+
+                // ══════════════════════════════════════════════════════
+                // 5. DRIVER
+                // ══════════════════════════════════════════════════════
                 .requestMatchers("/api/driver/**").hasAnyAuthority("ROLE_DRIVER", "ROLE_ADMIN")
+
+                // ══════════════════════════════════════════════════════
+                // 6. ANY AUTHENTICATED USER
+                // ══════════════════════════════════════════════════════
                 .requestMatchers("/api/notifications/**").authenticated()
+
+                // Bookings — specific paths before generic patterns
                 .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/status").hasAnyAuthority("ROLE_ADMIN", "ROLE_VENDOR")
                 .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/cancel").authenticated()
                 .requestMatchers(HttpMethod.POST,  "/api/bookings").authenticated()
                 .requestMatchers(HttpMethod.GET,   "/api/bookings/my").authenticated()
                 .requestMatchers(HttpMethod.GET,   "/api/bookings/**").authenticated()
+
+                // Payments
                 .requestMatchers(HttpMethod.POST, "/api/payments/process/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN")
                 .requestMatchers(HttpMethod.GET,  "/api/payments/booking/**").authenticated()
+
+                // Reviews
                 .requestMatchers(HttpMethod.POST, "/api/reviews").hasAuthority("ROLE_CUSTOMER")
+
+                // ══════════════════════════════════════════════════════
+                // 7. EVERYTHING ELSE — must be authenticated
+                // ══════════════════════════════════════════════════════
                 .anyRequest().authenticated()
             )
-            // ── NEW: OAuth2 login configuration ──────────────────────────────
+            // ── OAuth2 Login Configuration ────────────────────────────────────
             .oauth2Login(oauth -> oauth
                 .authorizationEndpoint(endpoint ->
                     endpoint.baseUri("/oauth2/authorize"))

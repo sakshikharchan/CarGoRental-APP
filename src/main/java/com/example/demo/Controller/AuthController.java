@@ -1,8 +1,9 @@
 package com.example.demo.Controller;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 import com.example.demo.DTOs.ApiResponse;
 import com.example.demo.DTOs.LoginRequest;
 import com.example.demo.DTOs.LoginResponse;
@@ -38,6 +39,27 @@ public class AuthController {
             return ResponseEntity.ok(ApiResponse.success("Login successful", response));
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@RequestBody Map<String, String> body) {
+        try {
+            authService.sendForgotPasswordEmail(body.get("email"));
+            // Always return success (don't reveal if email exists)
+            return ResponseEntity.ok(ApiResponse.success("If this email is registered, a reset link has been sent.", null));
+        } catch (Exception e) {
+            // Still return success to prevent email enumeration attacks
+            return ResponseEntity.ok(ApiResponse.success("If this email is registered, a reset link has been sent.", null));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@RequestBody Map<String, String> body) {
+        try {
+            authService.resetPassword(body.get("token"), body.get("newPassword"));
+            return ResponseEntity.ok(ApiResponse.success("Password reset successfully", null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
 }
